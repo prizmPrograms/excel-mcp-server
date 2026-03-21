@@ -1,0 +1,39 @@
+{
+  "name": "excel-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server for Excel VBA operations via COM",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "excel-mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc && node -e \"require('fs').copyFileSync('src/excel-com.ps1', 'dist/excel-com.ps1', require('fs').constants.COPYFILE_FICLONE)\"",
+    "watch": "tsc --watch",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "excel",
+    "vba",
+    "com",
+    "automation"
+  ],
+  "author": "prizmPrograms",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/prizmPrograms/excel-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/prizmPrograms/excel-mcp-server/issues"
+  },
+  "homepage": "https://github.com/prizmPrograms/excel-mcp-server#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
+  }
+}
