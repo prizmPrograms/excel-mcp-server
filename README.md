@@ -44,7 +44,37 @@ VBAプロジェクトにアクセスするには、Excelで以下の設定を有
 
 ## インストール
 
-### 1. リポジトリをクローン
+### 方法1: npx で直接使用（推奨・最も簡単）
+
+クローン不要で、すぐに使えます：
+
+**Claude Desktop の設定ファイル**（`%APPDATA%\Claude\claude_desktop_config.json`）に追加：
+
+```json
+{
+  "mcpServers": {
+    "excel": {
+      "command": "npx",
+      "args": ["github:prizmPrograms/excel-mcp-server"]
+    }
+  }
+}
+```
+
+**メリット**:
+- ✅ インストール不要（ローカルにファイルを残さない）
+- ✅ 常に最新版を使用
+- ✅ 最も簡単
+
+**注意**: 初回起動時は npx がパッケージをダウンロードするため少し時間がかかりますが、2回目以降はキャッシュが使われて高速になります。
+
+---
+
+### 方法2: ローカルにクローンして使用
+
+より高速な起動やオフライン使用が必要な場合：
+
+#### 1. リポジトリをクローン
 
 ```bash
 git clone https://github.com/prizmPrograms/excel-mcp-server.git
@@ -53,13 +83,13 @@ cd excel-mcp-server
 
 または、[Releases](https://github.com/prizmPrograms/excel-mcp-server/releases)からZIPファイルをダウンロードして展開することもできます。
 
-### 2. 依存関係をインストール
+#### 2. 依存関係をインストール
 
 ```bash
 npm install
 ```
 
-### 3. ビルド
+#### 3. ビルド
 
 ```bash
 npm run build
@@ -67,13 +97,19 @@ npm run build
 
 ## 使い方
 
-### MCPサーバーとして実行
+### 方法1を使用した場合（npx）
+
+設定ファイルに追加後、Claude Desktop を再起動するだけです。自動的に起動します。
+
+### 方法2を使用した場合（ローカルクローン）
+
+#### MCPサーバーとして実行
 
 ```bash
 node dist/index.js
 ```
 
-### MCP クライアント設定
+#### MCP クライアント設定
 
 Claude Desktop や他のMCPクライアントの設定ファイル（通常は `%APPDATA%\Claude\claude_desktop_config.json`）に以下を追加します：
 
