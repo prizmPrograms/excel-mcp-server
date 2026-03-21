@@ -214,7 +214,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'read_immediate_window',
-        description: 'VBAイミディエイトウィンドウの内容を読み取ります。Debug.Print出力やテスト結果の確認に使用します。**このツールを呼び出す前に、必ずユーザーへ次のメッセージを表示すること: 「イミディエイトウィンドウ操作を実行します。Excelウィンドウがアクティブになり、キーボード操作（Ctrl+G、Ctrl+A、Ctrl+C）が送信され、クリップボードが使用されます。よろしいですか？」**',
+        description: 'VBAイミディエイトウィンドウの内容を読み取ります。Debug.Print出力やテスト結果の確認に使用します。**このツールを呼び出す前に、必ずユーザーへ次のメッセージを表示すること: 「イミディエイトウィンドウ操作を実行します。Excelウィンドウがアクティブになり、キーボード操作（Ctrl+G、Ctrl+A、Ctrl+C）が送信され、クリップボードが使用されます。」**',
         inputSchema: {
           type: 'object',
           properties: {
@@ -228,7 +228,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'write_immediate_window',
-        description: 'VBAイミディエイトウィンドウで式を評価します。変数の値確認やテストコードの実行に使用します。一時マクロを生成して式を評価し、結果をDebug.Printで出力します。**このツールを呼び出す前に、必ずユーザーへ次のメッセージを表示すること: 「イミディエイトウィンドウ操作を実行します。Excelウィンドウがアクティブになり、キーボード操作（Ctrl+G、式の入力、Enter）が送信されます。よろしいですか？」**',
+        description: 'VBAイミディエイトウィンドウで式を評価します。変数の値確認やテストコードの実行に使用します。一時マクロを生成して式を評価し、結果をDebug.Printで出力します。**このツールを呼び出す前に、必ずユーザーへ次のメッセージを表示すること: 「イミディエイトウィンドウ操作を実行します。Excelウィンドウがアクティブになり、キーボード操作（Ctrl+G、式の入力、Enter）が送信されます。」**',
         inputSchema: {
           type: 'object',
           properties: {
