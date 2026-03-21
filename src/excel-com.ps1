@@ -3,28 +3,80 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-function Get-ExcelInstance {
-    try {
-        $excel = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
-        return $excel
-    }
-    catch {
+# Get Excel instance (currently supports single instance or first accessible instance)
+function Get-AllExcelInstances {
+    $instances = @()
+    
+    # Check if Excel is running
+    $processes = Get-Process -Name "EXCEL" -ErrorAction SilentlyContinue
+    
+    if ($processes.Count -eq 0) {
         Write-Error "Excel is not running"
         exit 1
     }
+    
+    # Get the accessible Excel instance
+    # Note: Due to COM limitations, only one Excel process can typically be accessed
+    # If multiple Excel.exe processes are running, this will connect to the first accessible one
+    try {
+        # Try GetActiveObject first (PowerShell 5)
+        $excel = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
+        $instances += $excel
+    }
+    catch {
+        Write-Error "Cannot access Excel COM object. Make sure Excel is running and accessible."
+        exit 1
+    }
+    
+    if ($instances.Count -eq 0) {
+        Write-Error "Cannot access Excel COM object"
+        exit 1
+    }
+    
+    # Within a single Excel instance, all workbooks are accessible
+    return ,$instances
+}
+
+# Find workbook across all instances
+function Find-WorkbookInInstances {
+    param([string]$WorkbookName)
+    
+    $instances = Get-AllExcelInstances
+    
+    foreach ($excel in $instances) {
+        foreach ($wb in $excel.Workbooks) {
+            if ($wb.Name -eq $WorkbookName) {
+                return @{
+                    Excel = $excel
+                    Workbook = $wb
+                }
+            }
+        }
+    }
+    
+    Write-Error "Workbook not found: $WorkbookName"
+    exit 1
+}
+
+# Backward compatibility wrapper
+function Get-ExcelInstance {
+    $instances = Get-AllExcelInstances
+    return $instances[0]
 }
 
 function Get-Workbooks {
-    $excel = Get-ExcelInstance
+    $instances = Get-AllExcelInstances
     $workbooks = @()
     
-    foreach ($wb in $excel.Workbooks) {
-        $workbooks += @{
-            Name = $wb.Name
-            FullName = $wb.FullName
-            Path = $wb.Path
-            Sheets = $wb.Worksheets.Count
-            HasVBProject = $wb.HasVBProject
+    foreach ($excel in $instances) {
+        foreach ($wb in $excel.Workbooks) {
+            $workbooks += @{
+                Name = $wb.Name
+                FullName = $wb.FullName
+                Path = $wb.Path
+                Sheets = $wb.Worksheets.Count
+                HasVBProject = $wb.HasVBProject
+            }
         }
     }
     
@@ -36,13 +88,8 @@ function Get-VBAModules {
         [string]$WorkbookName
     )
     
-    $excel = Get-ExcelInstance
-    $workbook = $excel.Workbooks | Where-Object { $_.Name -eq $WorkbookName } | Select-Object -First 1
-    
-    if (-not $workbook) {
-        Write-Error "Workbook not found: $WorkbookName"
-        exit 1
-    }
+    $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
+    $workbook = $result.Workbook
     
     $modules = @()
     
@@ -73,13 +120,8 @@ function Get-VBACode {
         [string]$ModuleName
     )
     
-    $excel = Get-ExcelInstance
-    $workbook = $excel.Workbooks | Where-Object { $_.Name -eq $WorkbookName } | Select-Object -First 1
-    
-    if (-not $workbook) {
-        Write-Error "Workbook not found: $WorkbookName"
-        exit 1
-    }
+    $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
+    $workbook = $result.Workbook
     
     try {
         $vbProject = $workbook.VBProject
@@ -116,13 +158,8 @@ function Add-VBAModule {
         [int]$ModuleType = 1
     )
     
-    $excel = Get-ExcelInstance
-    $workbook = $excel.Workbooks | Where-Object { $_.Name -eq $WorkbookName } | Select-Object -First 1
-    
-    if (-not $workbook) {
-        Write-Error "Workbook not found: $WorkbookName"
-        exit 1
-    }
+    $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
+    $workbook = $result.Workbook
     
     try {
         $vbProject = $workbook.VBProject
@@ -148,13 +185,8 @@ function Set-VBACode {
         [string]$Code
     )
     
-    $excel = Get-ExcelInstance
-    $workbook = $excel.Workbooks | Where-Object { $_.Name -eq $WorkbookName } | Select-Object -First 1
-    
-    if (-not $workbook) {
-        Write-Error "Workbook not found: $WorkbookName"
-        exit 1
-    }
+    $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
+    $workbook = $result.Workbook
     
     try {
         $vbProject = $workbook.VBProject
@@ -192,13 +224,9 @@ function Invoke-VBAMacro {
         [object[]]$Parameters = @()
     )
     
-    $excel = Get-ExcelInstance
-    $workbook = $excel.Workbooks | Where-Object { $_.Name -eq $WorkbookName } | Select-Object -First 1
-    
-    if (-not $workbook) {
-        Write-Error "Workbook not found: $WorkbookName"
-        exit 1
-    }
+    $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
+    $workbook = $result.Workbook
+    $excel = $result.Excel
     
     try {
         $fullMacroName = "$WorkbookName!$MacroName"
@@ -206,16 +234,16 @@ function Invoke-VBAMacro {
         # Build argument array with macro name as first element
         if ($Parameters.Count -gt 0) {
             $runArgs = @($fullMacroName) + $Parameters
-            $result = $excel.Application.Run.Invoke($runArgs)
+            $macroResult = $excel.Application.Run.Invoke($runArgs)
         } else {
             # No parameters - call with just macro name
-            $result = $excel.Application.Run($fullMacroName)
+            $macroResult = $excel.Application.Run($fullMacroName)
         }
         
         @{
             Success = $true
             MacroName = $MacroName
-            Result = $result
+            Result = $macroResult
         } | ConvertTo-Json
     }
     catch {
@@ -230,25 +258,21 @@ function Invoke-VBAMacroSafe {
         [string]$MacroName
     )
     
-    $excel = Get-ExcelInstance
-    $workbook = $excel.Workbooks | Where-Object { $_.Name -eq $WorkbookName } | Select-Object -First 1
-    
-    if (-not $workbook) {
-        Write-Error "Workbook not found: $WorkbookName"
-        exit 1
-    }
+    $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
+    $workbook = $result.Workbook
+    $excel = $result.Excel
     
     try {
         $fullMacroName = "$WorkbookName!$MacroName"
         
         try {
-            $result = $excel.Application.Run($fullMacroName)
+            $macroResult = $excel.Application.Run($fullMacroName)
             
             @{
                 Success = $true
                 Status = "success"
                 MacroName = $MacroName
-                Result = $result
+                Result = $macroResult
             } | ConvertTo-Json -Depth 10
         }
         catch {
@@ -272,13 +296,8 @@ function Invoke-VBAMacroSafe {
 function Get-SheetNames {
     param([string]$WorkbookName)
     
-    $excel = Get-ExcelInstance
-    $workbook = $excel.Workbooks | Where-Object { $_.Name -eq $WorkbookName } | Select-Object -First 1
-    
-    if (-not $workbook) {
-        Write-Error "Workbook not found: $WorkbookName"
-        exit 1
-    }
+    $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
+    $workbook = $result.Workbook
     
     $sheets = @()
     $index = 1
@@ -301,13 +320,8 @@ function Get-RangeValues {
         [string]$RangeAddress
     )
     
-    $excel = Get-ExcelInstance
-    $workbook = $excel.Workbooks | Where-Object { $_.Name -eq $WorkbookName } | Select-Object -First 1
-    
-    if (-not $workbook) {
-        Write-Error "Workbook not found: $WorkbookName"
-        exit 1
-    }
+    $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
+    $workbook = $result.Workbook
     
     try {
         $sheet = $workbook.Worksheets.Item($SheetName)
@@ -348,13 +362,8 @@ function Get-CellValue {
         [string]$CellAddress
     )
     
-    $excel = Get-ExcelInstance
-    $workbook = $excel.Workbooks | Where-Object { $_.Name -eq $WorkbookName } | Select-Object -First 1
-    
-    if (-not $workbook) {
-        Write-Error "Workbook not found: $WorkbookName"
-        exit 1
-    }
+    $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
+    $workbook = $result.Workbook
     
     try {
         $sheet = $workbook.Worksheets.Item($SheetName)
@@ -386,13 +395,8 @@ function Write-ImmediateWindow {
         [string]$Expression
     )
     
-    $excel = Get-ExcelInstance
-    $workbook = $excel.Workbooks | Where-Object { $_.Name -eq $WorkbookName } | Select-Object -First 1
-    
-    if (-not $workbook) {
-        Write-Error "Workbook not found: $WorkbookName"
-        exit 1
-    }
+    $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
+    $workbook = $result.Workbook
     
     try {
         Add-Type -AssemblyName System.Windows.Forms
@@ -460,13 +464,8 @@ public class WinAPI {
 function Get-ImmediateWindow {
     param([string]$WorkbookName)
     
-    $excel = Get-ExcelInstance
-    $workbook = $excel.Workbooks | Where-Object { $_.Name -eq $WorkbookName } | Select-Object -First 1
-    
-    if (-not $workbook) {
-        Write-Error "Workbook not found: $WorkbookName"
-        exit 1
-    }
+    $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
+    $workbook = $result.Workbook
     
     try {
         Add-Type -AssemblyName System.Windows.Forms
