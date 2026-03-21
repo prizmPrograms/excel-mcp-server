@@ -29,6 +29,13 @@
     "url": "https://github.com/prizmPrograms/excel-mcp-server/issues"
   },
   "homepage": "https://github.com/prizmPrograms/excel-mcp-server#readme",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "os": [
+    "win32"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4"
   },
