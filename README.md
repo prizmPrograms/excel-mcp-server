@@ -13,7 +13,7 @@ Windows環境で起動中のExcelインスタンスに対して、VBAモジュ�
 - **get_sheet_names**: ワークブック内のシート名一覧を取得
 - **get_range_values**: 指定した範囲のセル値を2次元配列で取得
 - **get_cell_value**: 指定したセルの値・数式を取得
-- **run_macro_safe**: エラーキャプチャ付きでマクロを実行（VBAエラー時もダイアログなしでエラー詳細を返す）
+- **run_macro_safe**: エラーキャプチャ付きでマクロを実行（実行時エラー発生時にVBAErrorNumber、ErrorDescription、ErrorSourceを返すため、AIが具体的なエラー内容を認識して自律修正可能）
 - **read_immediate_window**: VBAイミディエイトウィンドウの内容を読み取り（Debug.Print出力の確認）⚠️
 - **write_immediate_window**: VBAイミディエイトウィンドウで式を評価（変数値の確認やテストコード実行）⚠️
 
@@ -184,16 +184,28 @@ run_macro_safe
 }
 ```
 
-**エラー時レスポンス**（ダイアログなし）:
+**エラー時レスポンス**（ダイアログなし、詳細なVBAエラー情報付き）:
 ```json
 {
   "Success": false,
   "Status": "error",
   "MacroName": "Module1.MyMacro",
-  "ErrorMessage": "Type mismatch",
-  "HResult": "0x80020005"
+  "VBAErrorNumber": 13,
+  "ErrorDescription": "型が一致しません。",
+  "ErrorSource": "VBAProject",
+  "HResult": "0x800A000D"
 }
 ```
+
+**主なVBAエラー番号**:
+- `6`: オーバーフローしました。
+- `9`: インデックスが有効範囲にありません。
+- `11`: 0 で除算しました。
+- `13`: 型が一致しません。
+- `91`: オブジェクト変数または With ブロック変数が設定されていません。
+- `424`: オブジェクトが必要です。
+
+> **ℹ️ 改善点**: `run_macro_safe` は内部でラッパーマクロを自動生成し、`VBAErrorNumber`、`ErrorDescription`、`ErrorSource` を取得します。これにより、AIが具体的なエラー内容を認識して適切な修正を提案できます。
 
 ### シート名一覧の取得
 ```

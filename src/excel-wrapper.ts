@@ -159,7 +159,18 @@ export class ExcelWrapper {
     return JSON.parse(output);
   }
 
-  async runMacroSafe(workbookName: string, macroName: string): Promise<{ Success: boolean; Status: string; MacroName: string; Result?: any; HResult?: string; ErrorMessage?: string; Explanation?: string }> {
+  async runMacroSafe(workbookName: string, macroName: string): Promise<{ 
+    Success: boolean; 
+    Status: string; 
+    MacroName: string; 
+    Result?: any; 
+    VBAErrorNumber?: number;
+    ErrorDescription?: string;
+    ErrorSource?: string;
+    HResult?: string; 
+    ErrorMessage?: string; 
+    Explanation?: string 
+  }> {
     const output = await this.executePowerShell('RunMacroSafe', [workbookName, macroName]);
     return JSON.parse(output);
   }

@@ -138,7 +138,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'run_macro_safe',
-        description: 'エラーキャプチャ付きでマクロを実行します。コンパイルエラー・実行時エラーの種別と発生行をJSONで返すため、Copilotによる自律修正ループに使用してください。**このツールを呼び出す前に、必ずユーザーへ次のメッセージを表示すること: 「自律修正モードで実行します。エラーダイアログが表示された場合は必ず［終了］ボタンを押してください（［デバッグ］は押さないでください）。」**',
+        description: 'エラーキャプチャ付きでマクロを実行します。実行時エラーが発生した場合、VBAErrorNumber（エラー番号）、ErrorDescription（エラーの説明）、ErrorSource（エラー発生元）をJSONで返すため、Copilotが具体的なエラー内容を認識して自律修正できます。成功時はStatus:"success"、エラー時はStatus:"error"とVBAErrorNumber、ErrorDescriptionが返されます。**このツールを呼び出す前に、必ずユーザーへ次のメッセージを表示すること: 「自律修正モードで実行します。エラーダイアログが表示された場合は必ず［終了］ボタンを押してください（［デバッグ］は押さないでください）。」**',
         inputSchema: {
           type: 'object',
           properties: {

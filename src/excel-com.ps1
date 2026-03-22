@@ -262,33 +262,137 @@ function Invoke-VBAMacroSafe {
     $workbook = $result.Workbook
     $excel = $result.Excel
     
+    # Generate unique wrapper function name to avoid conflicts
+    $timestamp = [DateTime]::Now.ToString("yyyyMMddHHmmssfff")
+    $wrapperModuleName = "_ErrorCapture_$timestamp"
+    $wrapperFunctionName = "WrapperFunction"
+    
+    # Create wrapper function that captures error details and returns JSON
+    $wrapperCode = @"
+Function $wrapperFunctionName() As String
+    On Error GoTo ErrorHandler
+    
+    ' Call the actual macro (Sub can be called from Function)
+    $MacroName
+    
+    ' Success - return success status as JSON
+    $wrapperFunctionName = "{""status"":""success""}"
+    Exit Function
+    
+ErrorHandler:
+    ' Capture error details and return as JSON string
+    Dim errInfo As String
+    Dim desc As String
+    Dim src As String
+    
+    ' Escape quotes in description and source
+    desc = Replace(Err.Description, """", "\""")
+    desc = Replace(desc, vbCrLf, "\n")
+    desc = Replace(desc, vbCr, "\n")
+    desc = Replace(desc, vbLf, "\n")
+    
+    src = Replace(Err.Source, """", "\""")
+    
+    errInfo = "{""status"":""error""," & _
+              """number"":" & Err.Number & "," & _
+              """description"":""" & desc & """," & _
+              """source"":""" & src & """}"
+    
+    $wrapperFunctionName = errInfo
+End Function
+"@
+    
     try {
-        $fullMacroName = "$WorkbookName!$MacroName"
+        $vbProject = $workbook.VBProject
         
+        # Add wrapper module
+        $component = $vbProject.VBComponents.Add(1) # 1 = vbext_ct_StdModule
+        
+        # Set module name - if it fails, continue with auto-generated name
         try {
-            $macroResult = $excel.Application.Run($fullMacroName)
-            
-            @{
-                Success = $true
-                Status = "success"
-                MacroName = $MacroName
-                Result = $macroResult
-            } | ConvertTo-Json -Depth 10
+            $component.Name = $wrapperModuleName
+            $actualModuleName = $wrapperModuleName
         }
         catch {
-            $errorInfo = @{
-                Success = $false
-                Status = "error"
-                MacroName = $MacroName
-                ErrorMessage = $_.Exception.Message
-                HResult = "0x{0:X}" -f $_.Exception.HResult
-            }
-            
-            $errorInfo | ConvertTo-Json -Depth 10
+            # Name setting failed, use auto-generated name
+            $actualModuleName = $component.Name
         }
+        
+        # Add code to wrapper module
+        $component.CodeModule.AddFromString($wrapperCode)
+        
+        # Run wrapper function and get result
+        $fullMacroName = "$WorkbookName!$actualModuleName.$wrapperFunctionName"
+        
+        $executionError = $null
+        $jsonResult = $null
+        
+        try {
+            # Call wrapper function - it returns JSON string
+            $jsonResult = $excel.Application.Run($fullMacroName)
+        }
+        catch {
+            $executionError = $_
+        }
+        
+        # Clean up wrapper module
+        try {
+            $tempModule = $vbProject.VBComponents.Item($actualModuleName)
+            $vbProject.VBComponents.Remove($tempModule)
+        }
+        catch {
+            # Failed to remove module, not critical
+        }
+        
+        # Parse JSON result if we got one
+        if ($jsonResult) {
+            try {
+                $errorInfo = $jsonResult | ConvertFrom-Json
+                
+                if ($errorInfo.status -eq "success") {
+                    @{
+                        Success = $true
+                        Status = "success"
+                        MacroName = $MacroName
+                        Result = $null
+                    } | ConvertTo-Json -Depth 10
+                }
+                else {
+                    @{
+                        Success = $false
+                        Status = "error"
+                        MacroName = $MacroName
+                        VBAErrorNumber = $errorInfo.number
+                        ErrorDescription = $errorInfo.description
+                        ErrorSource = $errorInfo.source
+                    } | ConvertTo-Json -Depth 10
+                }
+                return
+            }
+            catch {
+                # JSON parsing failed, fall through to error handling
+            }
+        }
+        
+        # Fallback: if we got an execution error or JSON parsing failed
+        $errorInfo = @{
+            Success = $false
+            Status = "error"
+            MacroName = $MacroName
+        }
+        
+        if ($executionError) {
+            $errorInfo.ErrorMessage = $executionError.Exception.Message
+            $errorInfo.HResult = "0x{0:X}" -f $executionError.Exception.HResult
+        }
+        else {
+            $errorInfo.ErrorMessage = "Unknown error occurred"
+        }
+        
+        $errorInfo | ConvertTo-Json -Depth 10
     }
     catch {
-        Write-Error "Failed to prepare macro execution: $_"
+        Write-Error "Failed to execute macro with error capture: $_"
         exit 1
     }
 }
@@ -397,6 +501,7 @@ function Write-ImmediateWindow {
     
     $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
     $workbook = $result.Workbook
+    $excel = $result.Excel
     
     try {
         Add-Type -AssemblyName System.Windows.Forms
@@ -466,6 +571,7 @@ function Get-ImmediateWindow {
     
     $result = Find-WorkbookInInstances -WorkbookName $WorkbookName
     $workbook = $result.Workbook
+    $excel = $result.Excel
     
     try {
         Add-Type -AssemblyName System.Windows.Forms
