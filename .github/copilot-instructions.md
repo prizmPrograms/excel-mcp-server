@@ -61,6 +61,38 @@ No automated tests exist. Manual testing requires:
 
 ## Important Conventions
 
+### VBA Module Naming
+
+Module names MUST follow VBA rules:
+- **Start with a letter** (A-Z, a-z) - NOT underscore or number
+- **No spaces or special characters** (underscore is allowed)
+- **Maximum 31 characters**
+
+Example:
+```typescript
+// ✅ CORRECT
+const moduleName = `ErrorCapture_${Date.now()}`;
+const moduleName = `TempModule123`;
+
+// ❌ WRONG - will cause "マクロが見つかりません" error
+const moduleName = `_ErrorCapture_${Date.now()}`;
+const moduleName = `${Date.now()}_Module`;
+```
+
+### Timing: add_module + edit_vba
+
+After `add_module`, Excel needs a moment to register the module internally. If `edit_vba` is called too quickly, you may get "インデックスが有効範囲にありません" (Index out of range). Always use proper error handling:
+
+```typescript
+try {
+    await add_module(workbook, moduleName);
+    await edit_vba(workbook, moduleName, code);
+} catch (error) {
+    // If edit_vba fails, an empty module may remain
+    // Retry or inform user
+}
+```
+
 ### PowerShell Script Editing
 
 When modifying `src/excel-com.ps1`:
@@ -74,28 +106,37 @@ When modifying `src/excel-com.ps1`:
 ### TypeScript/MCP Integration
 
 - **ES Modules**: Use `.js` extensions in import paths (TypeScript compiles to `.js` but paths must match runtime)
-- **Tool names**: Use snake_case (MCP convention), e.g., `get_workbooks`, `run_macro_safe`
-- **Tool descriptions**: Written in Japanese to match user-facing documentation
+- **Tool names**: Use snake_case (MCP convention), e.g., `get_workbooks`, `run_macro`
+- **Tool descriptions**: Keep objective and factual - AI usage policies are in Prompts, not tool descriptions
 - **Input schemas**: Required fields must be specified in `required` array
+- **Prompts**: Guidelines for AI assistants are in `src/prompts/` directory
 
 ### Build Process
 
-The custom build script does two things:
+The custom build script does three things:
 1. Compiles TypeScript with `tsc`
 2. Copies `src/excel-com.ps1` to `dist/excel-com.ps1` (required at runtime)
+3. Compiles `src/prompts/*.ts` to `dist/prompts/*.js` for MCP Prompts feature
 
-Without the copy, ExcelWrapper cannot find the PowerShell script.
+Without the PowerShell script copy, ExcelWrapper cannot find the script.
+Without the prompts, AI clients cannot receive usage guidelines.
 
-## Special Tools
+## Special Features (v2.0.0)
 
-### run_macro_safe
+### MCP Prompts
 
-Automatically installs a `_MCPHelper` module in the target workbook to capture VBA runtime errors. Returns structured error info:
-- `VBAErrorNumber`: VBA error code (e.g., 13 = type mismatch)
-- `ErrorDescription`: Human-readable error message
-- `ErrorSource`: Source of the error
+The server provides AI usage guidelines via MCP Prompts feature:
+- **excel-vba-guidelines**: Comprehensive guidelines including error capture pattern, immediate window protocol, and VBA best practices
+- Automatically distributed to AI clients without user configuration
+- Updates when the package is updated
 
-This enables AI-driven autonomous debugging: AI can read error details, fetch the module code, fix it, and re-run.
+### Error Capture Pattern
+
+Replaces the removed `run_macro_safe` tool. AI assistants create temporary modules with error handlers:
+- Module name MUST start with a letter (e.g., `ErrorCapture_123`, not `_ErrorCapture_123`)
+- Captures VBA runtime errors as JSON: `{"status":"error","number":13,"description":"Type mismatch"}`
+- More transparent than run_macro_safe - users can see the temporary module
+- Enables autonomous debugging: AI reads error, fixes code, retries
 
 ### Immediate Window Tools
 
@@ -103,8 +144,7 @@ This enables AI-driven autonomous debugging: AI can read error details, fetch th
 - Interrupt user workflow (Excel window becomes foreground)
 - Use clipboard (may overwrite existing clipboard content)
 - Require no other applications to intercept keyboard events
-
-Always warn users before using these tools (per tool descriptions in README).
+- Should only be used with explicit user permission (documented in Prompts)
 
 ## Commit Message Conventions
 
