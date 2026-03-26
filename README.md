@@ -4,6 +4,8 @@ Windows環境で起動中のExcelインスタンスに対して、VBAモジュ�
 
 ## 機能
 
+### コアツール
+
 - **get_workbooks**: 現在起動しているExcelの全ワークブック一覧を取得
 - **list_modules**: ワークブック内の全VBAモジュール一覧を取得
 - **get_module_code**: 指定したモジュールのVBAコードを取得
@@ -13,17 +15,23 @@ Windows環境で起動中のExcelインスタンスに対して、VBAモジュ�
 - **get_sheet_names**: ワークブック内のシート名一覧を取得
 - **get_range_values**: 指定した範囲のセル値を2次元配列で取得
 - **get_cell_value**: 指定したセルの値・数式を取得
-- **run_macro_safe**: エラーキャプチャ付きでマクロを実行（実行時エラー発生時にVBAErrorNumber、ErrorDescription、ErrorSourceを返すため、AIが具体的なエラー内容を認識して自律修正可能）
 - **read_immediate_window**: VBAイミディエイトウィンドウの内容を読み取り（Debug.Print出力の確認）⚠️
 - **write_immediate_window**: VBAイミディエイトウィンドウで式を評価（変数値の確認やテストコード実行）⚠️
 
+### AIアシスタント向けガイドライン（Prompts機能）
+
+Excel MCP Serverは、AIアシスタントに対して使用方法のガイドラインを提供します：
+
+- **excel-vba-guidelines**: エラーキャプチャパターン、イミディエイト操作の許可プロトコルなどの詳細なガイドライン
+
+このガイドラインはMCPサーバー自体が提供するため、ユーザーによる追加設定は不要です。
+
 ### ⚠️ 注意が必要なツール
 
-以下のツールはExcelウィンドウをアクティブにし、キーボード操作を送信するため、実行中は他の作業が中断される可能性があります。使用前にAIアシスタント（Copilot）が確認メッセージを表示します：
+以下のツールはVBEウィンドウをアクティブにし、キーボード操作を送信するため、実行中は他の作業が中断される可能性があります。AIアシスタントは使用前にユーザーに確認します：
 
-- **read_immediate_window**: Excelウィンドウをアクティブにし、Ctrl+G、Ctrl+A、Ctrl+Cのキー操作を送信し、クリップボードを使用します
-- **write_immediate_window**: Excelウィンドウをアクティブにし、Ctrl+Gのキー操作、式の入力、Enterキーを送信します
-- **run_macro_safe**: マクロ実行中にエラーダイアログが表示された場合は［終了］ボタンを押してください
+- **read_immediate_window**: VBEウィンドウをアクティブにし、Ctrl+G、Ctrl+A、Ctrl+Cのキー操作を送信し、クリップボードを使用します
+- **write_immediate_window**: VBEウィンドウをアクティブにし、Ctrl+Gのキー操作、式の入力、Enterキーを送信します
 
 ## 前提条件
 
@@ -167,45 +175,36 @@ edit_vba
     End Sub
 ```
 
-### マクロの実行（エラーキャプチャ付き）
+### マクロの実行
 ```
-run_macro_safe
+run_macro
 - workbook: "Book1.xlsx"
 - macro_name: "Module1.MyMacro"
 ```
 
-**成功時レスポンス**:
-```json
-{
-  "Success": true,
-  "Status": "success",
-  "MacroName": "Module1.MyMacro",
-  "Result": null
-}
-```
+### エラーキャプチャパターン（デバッグ時）
 
-**エラー時レスポンス**（ダイアログなし、詳細なVBAエラー情報付き）:
-```json
-{
-  "Success": false,
-  "Status": "error",
-  "MacroName": "Module1.MyMacro",
-  "VBAErrorNumber": 13,
-  "ErrorDescription": "型が一致しません。",
-  "ErrorSource": "VBAProject",
-  "HResult": "0x800A000D"
-}
-```
+AIアシスタントは、マクロのデバッグ時に自動的にエラーキャプチャパターンを使用します。このパターンは、一時的なVBAラッパー関数を生成してエラー情報をキャプチャします。
+
+**パターンの仕組み:**
+1. 一時モジュール（例: `_ErrorCapture_1234567890`）を作成
+2. エラーキャプチャ用のラッパー関数を追加
+3. `run_macro`でラッパー関数を実行
+4. JSON形式でエラー情報を取得: `{"status":"error","number":13,"description":"Type mismatch"...}`
+5. エラー情報を基にコードを修正
+6. 一時モジュールをクリーンアップ
 
 **主なVBAエラー番号**:
-- `6`: オーバーフローしました。
-- `9`: インデックスが有効範囲にありません。
-- `11`: 0 で除算しました。
-- `13`: 型が一致しません。
-- `91`: オブジェクト変数または With ブロック変数が設定されていません。
-- `424`: オブジェクトが必要です。
+- `5`: 無効なプロシージャ呼び出し
+- `6`: オーバーフロー
+- `9`: インデックスが有効範囲にありません（配列）
+- `11`: 0で除算
+- `13`: 型が一致しません
+- `91`: オブジェクト変数が設定されていません
+- `424`: オブジェクトが必要です
+- `1004`: アプリケーション定義またはオブジェクト定義のエラー
 
-> **ℹ️ 改善点**: `run_macro_safe` は内部でラッパーマクロを自動生成し、`VBAErrorNumber`、`ErrorDescription`、`ErrorSource` を取得します。これにより、AIが具体的なエラー内容を認識して適切な修正を提案できます。
+詳細な使用方法は、AIアシスタントが提供する`excel-vba-guidelines`プロンプトに記載されています。
 
 ### シート名一覧の取得
 ```
@@ -292,20 +291,45 @@ read_immediate_window
 }
 ```
 
-## AIによるVBA自動修正ループ
+## AIによるVBA自動デバッグ
 
-`run_macro_safe` を使うことで、AIがエラーを検知して自動的にVBAを修正できます：
+AIアシスタントは、マクロのエラー時に自動的にデバッグと修正を行います：
+
+**エラーキャプチャパターンによる自動修正フロー:**
 
 ```
-1. run_macro_safe → エラー詳細取得（ErrorNumber + ErrorDescription）
+1. エラーキャプチャパターン実行 → 詳細なエラー情報取得（ErrorNumber + ErrorDescription）
 2. get_module_code → 問題のVBAコードを取得
 3. AI がエラーを解析して修正コードを生成
 4. edit_vba → 修正コードをモジュールに書き込む
-5. run_macro_safe → 再実行（成功するまでループ）
+5. エラーキャプチャパターン再実行 → 成功するまでループ
 ```
-
-> **注意**: `_MCPHelper` という名前のVBAモジュールが対象ワークブックに自動インストールされます（MCPサーバー内部利用）。このモジュールを削除しても次回 `run_macro_safe` 実行時に自動再インストールされます。
 
+詳細な実装方法は、AIアシスタントが利用する`excel-vba-guidelines`プロンプトに記載されています。
+
+## 移行ガイド（v2.0.0）
+
+### 🔄 run_macro_safe の削除について
+
+**v2.0.0で変更:** `run_macro_safe`ツールは削除されました。
+
+**代替方法:** AIアシスタントは、MCPの**Prompts機能**で提供される`excel-vba-guidelines`プロンプトに基づき、エラーキャプチャパターンを実装します。
+
+このパターンは以下のツールを組み合わせて実現されます：
+- `add_module`: 一時モジュール `_ErrorCapture_<timestamp>` の作成
+- `edit_vba`: エラーキャプチャラッパー関数の追加
+- `run_macro`: ラッパー関数の実行でJSON形式のエラー情報を取得
+
+**変更の利点:**
+- ✅ **透明性**: 何が起きているか明確（一時モジュールが作成される）
+- ✅ **柔軟性**: 必要に応じてカスタマイズ可能
+- ✅ **保守性**: ガイドラインはMCPサーバーに含まれ、自動更新される
+- ✅ **拡張性**: 将来的に他のガイドラインも追加可能
+
+**ユーザーへの影響:**
+- 既存のツール（add_module, edit_vba, run_macro）はすべて引き続き利用可能
+- AIアシスタントの動作は変わらず、より明確になります
+- 追加の設定は不要（`npx excel-mcp-server`で自動的に利用可能）
 ## トラブルシューティング
 
 ### Excelが認識されない
@@ -487,7 +511,7 @@ write_immediate_window
 ```
 1. edit_vba → テスト対象の関数を作成
 2. edit_vba → テストマクロを作成（Debug.Printで結果を出力）
-3. run_macro_safe → テストマクロを実行
+3. run_macro → テストマクロを実行
 4. read_immediate_window → テスト結果を読み取り
 5. AIが結果を解析して成功/失敗を判定
 6. 失敗している場合は修正して再テスト（ステップ1に戻る）

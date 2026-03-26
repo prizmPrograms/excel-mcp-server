@@ -5,22 +5,59 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { ExcelWrapper } from './excel-wrapper.js';
+import { AVAILABLE_PROMPTS } from './prompts/index.js';
 
 const excel = new ExcelWrapper();
 
 const server = new Server(
   {
     name: 'excel-mcp-server',
-    version: '1.0.0',
+    version: '2.0.0',
   },
   {
     capabilities: {
       tools: {},
+      prompts: {},
     },
   }
 );
+
+// Prompts handler - provides usage guidelines to AI assistants
+server.setRequestHandler(ListPromptsRequestSchema, async () => {
+  return {
+    prompts: AVAILABLE_PROMPTS.map((p) => ({
+      name: p.name,
+      description: p.description,
+    })),
+  };
+});
+
+server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+  const { name } = request.params;
+  const prompt = AVAILABLE_PROMPTS.find((p) => p.name === name);
+
+  if (!prompt) {
+    throw new Error(`Unknown prompt: ${name}`);
+  }
+
+  const content = await Promise.resolve(prompt.getContent());
+
+  return {
+    messages: [
+      {
+        role: 'user',
+        content: {
+          type: 'text',
+          text: content,
+        },
+      },
+    ],
+  };
+});
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
@@ -137,24 +174,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
       {
-        name: 'run_macro_safe',
-        description: 'エラーキャプチャ付きでマクロを実行します。実行時エラーが発生した場合、VBAErrorNumber（エラー番号）、ErrorDescription（エラーの説明）、ErrorSource（エラー発生元）をJSONで返すため、Copilotが具体的なエラー内容を認識して自律修正できます。成功時はStatus:"success"、エラー時はStatus:"error"とVBAErrorNumber、ErrorDescriptionが返されます。**このツールを呼び出す前に、必ずユーザーへ次のメッセージを表示すること: 「自律修正モードで実行します。エラーダイアログが表示された場合は必ず［終了］ボタンを押してください（［デバッグ］は押さないでください）。」**',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            workbook: {
-              type: 'string',
-              description: 'ワークブック名（例: "Book1.xlsx"）',
-            },
-            macro_name: {
-              type: 'string',
-              description: 'マクロ名（例: "Module1.MyMacro"）',
-            },
-          },
-          required: ['workbook', 'macro_name'],
-        },
-      },
-      {
         name: 'get_sheet_names',
         description: 'ワークブック内のシート名一覧を取得します',
         inputSchema: {
@@ -214,7 +233,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'read_immediate_window',
-        description: 'VBAイミディエイトウィンドウの内容を読み取ります。Debug.Print出力やテスト結果の確認に使用します。**このツールを呼び出す前に、必ずユーザーへ次のメッセージを表示すること: 「イミディエイトウィンドウ操作を実行します。Excelウィンドウがアクティブになり、キーボード操作（Ctrl+G、Ctrl+A、Ctrl+C）が送信され、クリップボードが使用されます。」**',
+        description: 'VBAイミディエイトウィンドウの内容を読み取ります。Debug.Print出力やテスト結果の確認に使用します。注意: この操作はVBEウィンドウをアクティブにし、キーボード操作（Ctrl+G、Ctrl+A、Ctrl+C）を送信し、クリップボードを使用します。',
         inputSchema: {
           type: 'object',
           properties: {
@@ -228,7 +247,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'write_immediate_window',
-        description: 'VBAイミディエイトウィンドウで式を評価します。変数の値確認やテストコードの実行に使用します。一時マクロを生成して式を評価し、結果をDebug.Printで出力します。**このツールを呼び出す前に、必ずユーザーへ次のメッセージを表示すること: 「イミディエイトウィンドウ操作を実行します。Excelウィンドウがアクティブになり、キーボード操作（Ctrl+G、式の入力、Enter）が送信されます。」**',
+        description: 'VBAイミディエイトウィンドウで式を評価します。変数の値確認やテストコードの実行に使用します。注意: この操作はVBEウィンドウをアクティブにし、キーボード操作（Ctrl+G、式の入力、Enter）を送信します。',
         inputSchema: {
           type: 'object',
           properties: {
@@ -335,22 +354,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           parameters?: any[];
         };
         const result = await excel.runMacro(workbook, macro_name, parameters);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
-        };
-      }
-
-      case 'run_macro_safe': {
-        const { workbook, macro_name } = args as {
-          workbook: string;
-          macro_name: string;
-        };
-        const result = await excel.runMacroSafe(workbook, macro_name);
         return {
           content: [
             {
